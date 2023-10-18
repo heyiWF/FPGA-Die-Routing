@@ -1,73 +1,104 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <algorithm>
 #include <vector>
 #include <string>
 #include <map>
+#include <boost/bind.hpp>
+#include <cstdlib>
 
 using namespace std;
 
-vector<vector<bool>> edge;
-vector<vector<int>> die_in_fpga;
-vector<vector<int>> wire;
-vector<vector<string>> node_in_die;
-vector<vector<bool>> is_tpm;
+struct node
+{
+    string name;
+    int die;
+};
+
+struct arc
+{
+    int i;
+    int j;
+    bool is_tpm;
+    int capacity;
+};
+
+struct die
+{
+    int id;
+    int fpga;
+    vector<node> nodes;
+    vector<arc> arcs;
+};
+
+struct net
+{
+    int netid;
+    node source;
+    vector<node> sinks;
+};
+
+struct fpga
+{
+    int fpgaid;
+    vector<int> dies;
+};
+
+// struct net, node, arc, die, fpga
+
+vector<net> nets;
+vector<node> nodes;
+vector<arc> arcs;
+vector<die> dies;
+vector<fpga> fpgas;
 vector<int> path;
-map<string, int> node_to_die;
-map<int, int> die_to_fpga;
 int num_fpga = 0;
 int num_die = 0;
 int num_node = 0;
+int num_net = 0;
 
 void test_print_all()
 {
     cout << "Total number of FPGA: " << num_fpga << endl;
     cout << "Total number of die: " << num_die << endl;
-    for (int i = 0; i < die_in_fpga.size(); i++)
+    for (auto i = fpgas.begin(); i != fpgas.end(); i++)
     {
-        cout << "FPGA " << i << ": ";
-        for (int j = 0; j < die_in_fpga[i].size(); j++)
+        cout << "FPGA " << i->fpgaid << ": ";
+        for (auto j = i->dies.begin(); j != i->dies.end(); j++)
         {
-            cout << die_in_fpga[i][j] << " ";
+            cout << *j << " ";
         }
         cout << endl;
     }
-    // print is_tpm
-    for (int i = 0; i < is_tpm.size(); i++)
+
+    for (auto i = dies.begin(); i != dies.end(); i++)
     {
-        for (int j = i; j < is_tpm[i].size(); j++)
+        cout << "Die " << i->id << ": ";
+        for (auto j = i->nodes.begin(); j != i->nodes.end(); j++)
         {
-            cout << i << " <-> " << j << ": ";
-            cout << boolalpha << is_tpm[i][j] << "\t";
+            cout << j->name << " ";
         }
         cout << endl;
     }
-    for (int i = 0; i < node_in_die.size(); i++)
+
+    for (auto i = dies.begin(); i != dies.end(); i++)
     {
-        cout << "Die " << i << ": ";
-        for (int j = 0; j < node_in_die[i].size(); j++)
+        cout << "Die " << i->id << ": " << endl;
+        for (auto j = i->arcs.begin(); j != i->arcs.end(); j++)
         {
-            cout << node_in_die[i][j] << " ";
+            cout << j->i << " - " << j->j << " (" << j->capacity << ") " << boolalpha << j->is_tpm << endl;
         }
         cout << endl;
     }
-    // print map node_to_die
-    for (auto it = node_to_die.begin(); it != node_to_die.end(); it++)
+
+    for(auto i = nets.begin(); i != nets.end(); i++)
     {
-        cout << it->first << " - Die " << it->second << endl;
-    }
-    // print map die_to_fpga
-    for (auto it = die_to_fpga.begin(); it != die_to_fpga.end(); it++)
-    {
-        cout << "Die " << it->first << " - FPGA " << it->second << endl;
-    }
-    // print wire
-    for (int i = 0; i < wire.size(); i++)
-    {
-        cout << "Die " << i << ": ";
-        for (int j = 0; j < wire[i].size(); j++)
+        cout << "Net " << i->netid << ": " << endl;
+        cout << i->source.name << " -> ";
+        for(auto j = i->sinks.begin(); j != i->sinks.end(); j++)
         {
-            cout << wire[i][j] << "\t";
+            cout << j->name << " ";
         }
         cout << endl;
     }
@@ -92,8 +123,9 @@ void read_fpga_die()
         {
             int fpga = stoi(s.substr(4, pos - 4));
         }
-        die_in_fpga.push_back(vector<int>());
+        fpgas.push_back(fpga());
         num_fpga++;
+        fpgas.back().fpgaid = num_fpga;
         while (s.find("Die") != -1)
         {
             int pos = s.find("Die");
@@ -107,19 +139,20 @@ void read_fpga_die()
                     break;
                 }
             }
-            int die;
+            die newdie;
             if (pos2 == -1)
             {
-                die = stoi(s.substr(pos + 3));
+                newdie.id = stoi(s.substr(pos + 3));
                 s = "";
             }
             else
             {
-                die = stoi(s.substr(pos + 3, pos2 - pos - 4));
+                newdie.id = stoi(s.substr(pos + 3, pos2 - pos - 4));
                 s = s.substr(pos2);
             }
-            die_in_fpga.back().push_back(die);
-            die_to_fpga[die] = num_fpga;
+            newdie.fpga = num_fpga;
+            fpgas.back().dies.push_back(newdie.id);
+            dies.push_back(newdie);
             num_die++;
         }
     }
@@ -140,20 +173,22 @@ void read_die_position()
     while (getline(die_position, s))
     {
         int pos = s.find(":");
-        int die = -1;
+        int dieid = -1;
         if (pos != string::npos)
         {
-            die = stoi(s.substr(3, pos - 3));
+            dieid = stoi(s.substr(3, pos - 3));
         }
-        node_in_die.push_back(vector<string>());
+        auto it = find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == dieid);
         s = s.substr(pos + 2);
         while (!s.empty())
         {
             int pos = s.find(" ");
-            string node = s.substr(0, pos);
-            cout << node << endl;
-            node_in_die.back().push_back(node);
-            node_to_die[node] = die;
+            node newnode;
+            newnode.name = s.substr(0, pos);
+            cout << newnode.name << endl;
+            newnode.die = dieid;
+            it->nodes.push_back(newnode);
+            nodes.push_back(newnode);
             num_node++;
             if (pos != -1)
                 s = s.substr(pos + 1);
@@ -177,51 +212,75 @@ void read_die_network()
     int row = 0;
     while (getline(die_network, s))
     {
-        wire.push_back(vector<int>());
-        is_tpm.push_back(vector<bool>());
         int num;
         // convert string to stringstream
         stringstream ss(s);
         int col = 0;
         while (ss >> num)
         {
-            wire.back().push_back(num);
-            if (die_to_fpga[row] == die_to_fpga[col] || num == 0)
-                is_tpm.back().push_back(false);
+            if (num == 0 || row > col)
+            {
+                col++;
+                continue;
+            }
+            auto it1 = find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == row);
+            auto it2 = find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == col);
+            arc newarc;
+            newarc.i = it1->id;
+            newarc.j = it2->id;
+            if (it1->fpga == it2->fpga)
+            {
+                newarc.is_tpm = false;
+                newarc.capacity = num;
+            }
             else
-                is_tpm.back().push_back(true);
+            {
+                newarc.is_tpm = true;
+                newarc.capacity = num;
+            }
+            arcs.push_back(newarc);
+            it1->arcs.push_back(newarc);
+            it2->arcs.push_back(newarc);
             col++;
         }
         row++;
     }
 }
 
-vector<int> findShortestPath(int i, int j)
+void read_net()
 {
-    vector<int> path;
-    if (edge[i][j])
+    // open file
+    ifstream design_net;
+    design_net.open("design.net");
+    if (!design_net.is_open())
     {
-        path.push_back(i);
-        path.push_back(j);
-        return path;
+        cout << "Error opening file";
+        exit(1);
     }
-    else
+    string s;
+    int current_line = -1;
+    while (getline(design_net, s))
     {
-        for (int k = 0; k < edge.size(); k++)
+        current_line++;
+        string name;
+        string type;
+        stringstream ss(s);
+        ss >> name;
+        ss >> type;
+        if (type == "s")
         {
-            if (edge[i][k])
-            {
-                vector<int> path1 = findShortestPath(k, j);
-                if (path1.size() > 0)
-                {
-                    path.push_back(i);
-                    path.insert(path.end(), path1.begin(), path1.end());
-                    return path;
-                }
-            }
+            net newnet;
+            newnet.netid = current_line;
+            auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
+            newnet.source = *it;
+            nets.push_back(newnet);
+        }
+        else if (type == "l")
+        {
+            auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
+            nets.back().sinks.push_back(*it);
         }
     }
-    return path;
 }
 
 int main()
@@ -234,6 +293,8 @@ int main()
     read_die_position();
     cout << "Reading design.die.network!" << endl;
     read_die_network();
+    cout << "Reading design.net!" << endl;
+    read_net();
 
     test_print_all();
     return 0;

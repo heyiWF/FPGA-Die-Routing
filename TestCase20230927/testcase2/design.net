@@ -1,0 +1,375 @@
+g19 s 1
+g7 l
+g8 l
+g6 l
+g12 l
+g2 s 1
+g6 l
+g1 s 1
+g7 l
+g8 l
+g6 l
+g3 s 1
+g7 l
+g8 l
+g6 l
+g4 s 1
+g7 l
+g5 s 1
+g8 l
+g8 s 1
+gp5 l
+g5 l
+g7 s 1
+gp4 l
+g5 l
+g4 l
+g6 s 1
+gp3 l
+g4 l
+g5 l
+g2 l
+gp0 s 1
+g3 l
+g13 l
+gp7 s 1
+g1 l
+g4 l
+g5 l
+gp6 s 1
+g1 l
+g4 l
+g5 l
+g0 s 1
+g19 l
+g40 l
+g41 l
+g42 l
+g43 l
+g44 l
+g45 l
+g46 l
+g47 l
+g49 l
+g50 l
+g51 l
+g53 l
+g54 l
+g55 l
+g56 l
+g57 l
+g58 l
+g59 l
+g60 l
+g62 l
+gp1 s 1
+g0 l
+gp2 s 1
+g0 l
+g9 s 1
+g52 l
+g61 l
+g48 l
+g11 s 1
+g40 l
+g41 l
+g42 l
+g43 l
+g44 l
+g45 l
+g46 l
+g47 l
+g49 l
+g50 l
+g51 l
+g53 l
+g54 l
+g55 l
+g56 l
+g57 l
+g58 l
+g59 l
+g60 l
+g62 l
+g19 l
+g10 s 1
+g52 l
+g61 l
+g48 l
+g12 s 1
+g19 l
+g13 s 1
+g40 l
+g41 l
+g42 l
+g43 l
+g44 l
+g45 l
+g46 l
+g47 l
+g49 l
+g50 l
+g51 l
+g53 l
+g54 l
+g55 l
+g56 l
+g57 l
+g58 l
+g59 l
+g60 l
+g62 l
+g19 l
+g14 s 1
+g20 l
+g21 l
+g22 l
+g23 l
+g24 l
+g25 l
+g26 l
+g27 l
+g28 l
+g29 l
+g30 l
+g31 l
+g32 l
+g33 l
+g34 l
+g35 l
+g36 l
+g37 l
+g38 l
+g39 l
+g12 l
+g15 s 1
+g20 l
+g21 l
+g22 l
+g23 l
+g24 l
+g25 l
+g26 l
+g27 l
+g28 l
+g29 l
+g30 l
+g31 l
+g32 l
+g33 l
+g34 l
+g35 l
+g36 l
+g37 l
+g38 l
+g39 l
+g12 l
+g16 s 1
+g20 l
+g21 l
+g22 l
+g23 l
+g24 l
+g25 l
+g26 l
+g27 l
+g28 l
+g29 l
+g30 l
+g31 l
+g32 l
+g33 l
+g34 l
+g35 l
+g36 l
+g37 l
+g38 l
+g39 l
+g12 l
+g17 s 1
+g20 l
+g21 l
+g22 l
+g23 l
+g24 l
+g25 l
+g26 l
+g27 l
+g28 l
+g29 l
+g30 l
+g31 l
+g32 l
+g33 l
+g34 l
+g35 l
+g36 l
+g37 l
+g38 l
+g39 l
+g12 l
+g18 s 1
+g20 l
+g21 l
+g22 l
+g23 l
+g24 l
+g25 l
+g26 l
+g27 l
+g28 l
+g29 l
+g30 l
+g31 l
+g32 l
+g33 l
+g34 l
+g35 l
+g36 l
+g37 l
+g38 l
+g39 l
+g12 l
+g48 s 1
+g21 l
+g48 s 1
+g22 l
+g48 s 1
+g23 l
+g48 s 1
+g24 l
+g48 s 1
+g25 l
+g48 s 1
+g26 l
+g48 s 1
+g27 l
+g52 s 1
+g28 l
+g52 s 1
+g29 l
+g52 s 1
+g30 l
+g61 s 1
+g31 l
+g61 s 1
+g32 l
+g61 s 1
+g33 l
+g61 s 1
+g34 l
+g61 s 1
+g35 l
+g61 s 1
+g36 l
+g61 s 1
+g37 l
+g61 s 1
+g38 l
+g48 s 1
+g39 l
+g20 s 1
+g40 l
+g21 s 1
+g41 l
+g22 s 1
+g42 l
+g23 s 1
+g43 l
+g24 s 1
+g44 l
+g25 s 1
+g45 l
+g26 s 1
+g46 l
+g27 s 1
+g47 l
+g28 s 1
+g49 l
+g29 s 1
+g50 l
+g30 s 1
+g51 l
+g31 s 1
+g53 l
+g32 s 1
+g54 l
+g33 s 1
+g55 l
+g34 s 1
+g56 l
+g35 s 1
+g57 l
+g36 s 1
+g58 l
+g37 s 1
+g59 l
+g38 s 1
+g60 l
+g39 s 1
+g62 l
+g48 s 1
+g52 l
+g61 s 1
+g48 l
+g40 s 1
+g15 l
+g20 l
+g61 l
+g41 s 1
+g14 l
+g48 l
+g42 s 1
+g18 l
+g48 l
+g43 s 1
+g15 l
+g48 l
+g44 s 1
+g17 l
+g48 l
+g45 s 1
+g14 l
+g48 l
+g46 s 1
+g15 l
+g48 l
+g47 s 1
+g18 l
+g48 l
+g49 s 1
+g15 l
+g52 l
+g50 s 1
+g17 l
+g52 l
+g51 s 1
+g17 l
+g52 l
+g53 s 1
+g16 l
+g61 l
+g54 s 1
+g14 l
+g61 l
+g55 s 1
+g14 l
+g61 l
+g56 s 1
+g18 l
+g61 l
+g57 s 1
+g16 l
+g61 l
+g58 s 1
+g17 l
+g61 l
+g59 s 1
+g18 l
+g61 l
+g60 s 1
+g16 l
+g61 l
+g62 s 1
+g16 l
+g48 l
