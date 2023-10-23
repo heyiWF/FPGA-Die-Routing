@@ -309,12 +309,58 @@ void read_net()
     }
 }
 
+int calculate_distance(const int netid, const vector<int> &path)
+{
+    int distance = 0;
+    int point = 0;
+
+    while (point < path.size() - 1)
+    {
+        int next = point + 1;
+        die *die = &*find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == path[point]);
+        arc *arc = nullptr;
+        for (auto i = die->arcs.begin(); i != die->arcs.end(); i++)
+        {
+            if (i->i == path[next] || i->j == path[next])
+            {
+                arc = &*i;
+                break;
+            }
+        }
+        if (arc->is_tpm)
+        {
+            int min_ratio = arc->wire[0].ratio;
+            tpm_wire *min_wire = &arc->wire[0];
+            for (int i = 1; i < arc->wire.size(); i++)
+            {
+                if (arc->wire[i].ratio < min_ratio)
+                {
+                    min_ratio = arc->wire[i].ratio;
+                    min_wire = &arc->wire[i];
+                }
+            }
+            distance += min_ratio / 4;
+            min_wire->netids.push_back(netid);
+            if ((min_wire->netids.size() - min_wire->ratio) >= 4)
+            {
+                min_wire->ratio += 4;
+            }
+        }
+        else
+        {
+            distance++;
+            arc->capacity--;
+        }
+        point++;
+    }
+    return distance + 1;
+}
+
 int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
 {
     vector<bool> visited(num_die, false);
     map<int, int> parent; // die and its parent
     parent[source_die.id] = source_die.id;
-    int dist = 1;
     queue<die> q;
     q.push(source_die);
     visited[source_die.id] = true;
@@ -322,10 +368,11 @@ int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
     {
         die u = q.front();
         q.pop();
-        for (auto arc = u.arcs.begin(); arc != u.arcs.end(); arc++)
+        for (int arc = 0; arc < u.arcs.size(); arc++)
         {
-            int other = arc->i == u.id ? arc->j : arc->i;
-            if (!arc->is_tpm && arc->capacity > 0)
+            int other = u.arcs[arc].i == u.id ? u.arcs[arc].j : u.arcs[arc].i;
+            // cout << u.id << " -> " << other << " [" << u.arcs[arc].capacity << "]" << endl;
+            if (!u.arcs[arc].is_tpm && u.arcs[arc].capacity > 0) // sll
             {
                 if (!visited[other])
                 {
@@ -334,11 +381,10 @@ int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
                         path.push_back(other);
                         while (parent[u.id] != u.id)
                         {
-                            dist++;
                             path.push_back(u.id);
                             u = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == parent[u.id]);
                         }
-                        return dist;
+                        return calculate_distance(netid, path);
                     }
                     else
                     {
@@ -346,46 +392,27 @@ int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
                         q.push(*find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == other));
                         visited[other] = true;
                     }
-                    arc->capacity--;
                 }
             }
-            else
+            else // tpm
             {
                 if (!visited[other])
                 {
-                    int min_ratio = arc->wire[0].ratio;
-                    tpm_wire min_wire = arc->wire[0];
-                    for (auto wire = arc->wire.begin(); wire != arc->wire.end(); wire++)
-                    {
-                        if (wire->ratio < min_ratio)
-                        {
-                            min_ratio = wire->ratio;
-                            min_wire = *wire;
-                        }
-                    }
-                    int wire_dist = min_ratio / 4;
-                    dist += (wire_dist - 1);
                     if (other == sink_die.id)
                     {
                         path.push_back(other);
                         while (parent[u.id] != u.id)
                         {
-                            dist++;
                             path.push_back(u.id);
                             u = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == parent[u.id]);
                         }
-                        return dist;
+                        return calculate_distance(netid, path);
                     }
                     else
                     {
                         parent[other] = u.id;
                         q.push(*find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == other));
                         visited[other] = true;
-                    }
-                    min_wire.netids.push_back(netid);
-                    if ((min_wire.netids.size() - min_wire.ratio) >= 4)
-                    {
-                        min_wire.ratio += 4;
                     }
                 }
             }
@@ -419,6 +446,10 @@ void route_net(net n)
         vector<int> path;
         // path.push_back(source_die.id);
         int distance = bfs_find_path(source_die, *i, n.netid, path);
+        if (distance == -1)
+        {
+            exit(-1);
+        }
         path.push_back(source_die.id);
         cout << " [ ";
         for (int i = path.size() - 1; i >= 0; i--)
@@ -428,6 +459,50 @@ void route_net(net n)
         cout << "]";
         cout << " [" << distance << "]" << endl;
     }
+}
+
+void read_and_route_net()
+{
+    // open file
+    ifstream design_net;
+    design_net.open("design.net");
+    if (!design_net.is_open())
+    {
+        cout << "Error opening file";
+        exit(1);
+    }
+    string s;
+    int current_line = -1;
+    bool flag = false;
+    while (getline(design_net, s))
+    {
+        current_line++;
+        cout << current_line << "\r";
+        string name;
+        string type;
+        stringstream ss(s);
+        ss >> name;
+        ss >> type;
+        if (type == "s")
+        {
+            if (flag)
+            {
+                route_net(nets.back());
+            }
+            net newnet;
+            newnet.netid = current_line;
+            auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
+            newnet.source = *it;
+            nets.push_back(newnet);
+            flag = true;
+        }
+        else if (type == "l")
+        {
+            auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
+            nets.back().sinks.push_back(*it);
+        }
+    }
+    route_net(nets.back());
 }
 
 void route_all_nets()
@@ -448,12 +523,14 @@ int main()
     read_die_position();
     cout << "Reading design.die.network!" << endl;
     read_die_network();
+    /*
     cout << "Reading design.net!" << endl;
     read_net();
 
     test_print_all();
-
+    */
     cout << "Routing all nets!" << endl;
-    route_all_nets();
+    // route_all_nets();
+    read_and_route_net();
     return 0;
 }
