@@ -44,8 +44,11 @@ struct die
 struct net
 {
     int netid;
-    node source;
-    vector<node> sinks;
+    int source;
+    vector<int> sinks;
+    float max_routing_weight;
+    vector<int> critical_path;
+    vector<arc> arcs_set;
 };
 
 struct fpga
@@ -104,10 +107,10 @@ void test_print_all()
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
         cout << "Net " << i->netid << ": " << endl;
-        cout << i->source.name << " -> ";
+        cout << i->source << " -> ";
         for (auto j = i->sinks.begin(); j != i->sinks.end(); j++)
         {
-            cout << j->name << " ";
+            cout << *j << " ";
         }
         cout << endl;
     }
@@ -298,13 +301,13 @@ void read_net()
             net newnet;
             newnet.netid = current_line;
             auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
-            newnet.source = *it;
+            newnet.source = it->die;
             nets.push_back(newnet);
         }
         else if (type == "l")
         {
             auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
-            nets.back().sinks.push_back(*it);
+            nets.back().sinks.push_back(it->die);
         }
     }
 }
@@ -422,35 +425,30 @@ int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
     return -1;
 }
 
-void route_net(net n)
+void route_net(net &n)
 {
     cout << "Routing net " << n.netid << endl;
-    // find the source
-    auto source = find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == n.source.die);
-    die source_die = *source;
-    // find the sinks
-    vector<die> sink_dies;
+    die source_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == n.source);
     for (auto i = n.sinks.begin(); i != n.sinks.end(); i++)
     {
-        sink_dies.push_back(*find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == i->die));
-    }
-    // find the path
-    for (auto i = sink_dies.begin(); i != sink_dies.end(); i++)
-    {
-        if (i->id == source_die.id)
+        cout << n.source << " -> " << *i;
+        vector<int> path;
+        die sink_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == *i);
+        if (n.source == *i)
         {
-            cout << source_die.id << " -> " << i->id << " [ " << source_die.id << " ] [ 0 ]" << endl;
+            cout << " [ " << n.source << " ] [0]" << endl;
             continue;
         }
-        cout << source_die.id << " -> " << i->id;
-        vector<int> path;
-        // path.push_back(source_die.id);
-        int distance = bfs_find_path(source_die, *i, n.netid, path);
+        int distance = bfs_find_path(source_die, sink_die, n.netid, path);
         if (distance == -1)
         {
             exit(-1);
         }
-        path.push_back(source_die.id);
+        if (distance > n.max_routing_weight)
+        {
+            n.max_routing_weight = distance;
+        }
+        path.push_back(n.source);
         cout << " [ ";
         for (int i = path.size() - 1; i >= 0; i--)
         {
@@ -488,21 +486,28 @@ void read_and_route_net()
             if (flag)
             {
                 route_net(nets.back());
+                cout << "{" << nets.back().max_routing_weight << "}" << endl;
             }
             net newnet;
             newnet.netid = current_line;
             auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
-            newnet.source = *it;
+            newnet.source = it->die;
+            newnet.max_routing_weight = 0;
             nets.push_back(newnet);
             flag = true;
         }
         else if (type == "l")
         {
             auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
-            nets.back().sinks.push_back(*it);
+            node newnode = *it;
+            if (find(nets.back().sinks.begin(), nets.back().sinks.end(), it->die) == nets.back().sinks.end()) // && it->die != nets.back().source)
+            {
+                nets.back().sinks.push_back(newnode.die);
+            }
         }
     }
     route_net(nets.back());
+    cout << "{" << nets.back().max_routing_weight << "}" << endl;
 }
 
 void route_all_nets()
