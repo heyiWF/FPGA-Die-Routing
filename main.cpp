@@ -57,7 +57,15 @@ struct fpga
     vector<int> dies;
 };
 
-// struct net, node, arc, die, fpga,tpm_wire
+struct path
+{
+    int uses;                 // how many circuits are using this path
+    float routing_weight;     // routing weights may vary because using tdm wires with different ratios
+    vector<int> using_netids; // all nets that contain this path
+    vector<int> path_route;   // detail of this path (all the dies involved)
+};
+
+// struct net, node, arc, die, fpga, tpm_wire, path
 
 vector<net> nets;
 vector<node> nodes;
@@ -312,7 +320,7 @@ void read_net()
     }
 }
 
-int calculate_distance(const int netid, const vector<int> &path)
+int calculate_distance(net &n, const vector<int> &path)
 {
     int distance = 0;
     int point = 0;
@@ -330,6 +338,20 @@ int calculate_distance(const int netid, const vector<int> &path)
                 break;
             }
         }
+        bool is_recorded = false;
+        for (auto const &recorded_arc : n.arcs_set)
+        {
+            if ((arc->i == recorded_arc.i && arc->j == recorded_arc.j) || (arc->i == recorded_arc.j && arc->j == recorded_arc.i))
+            {
+                is_recorded = true;
+                break;
+            }
+        }
+        if (is_recorded)
+        {
+            point++;
+            continue;
+        }
         if (arc->is_tpm)
         {
             int min_ratio = arc->wire[0].ratio;
@@ -343,23 +365,25 @@ int calculate_distance(const int netid, const vector<int> &path)
                 }
             }
             distance += min_ratio / 4;
-            min_wire->netids.push_back(netid);
+            min_wire->netids.push_back(n.netid);
             if ((min_wire->netids.size() - min_wire->ratio) >= 4)
             {
                 min_wire->ratio += 4;
             }
+            n.arcs_set.push_back(*arc);
         }
         else
         {
             distance++;
             arc->capacity--;
+            n.arcs_set.push_back(*arc);
         }
         point++;
     }
     return distance + 1;
 }
 
-int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
+int bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
 {
     vector<bool> visited(num_die, false);
     map<int, int> parent; // die and its parent
@@ -387,7 +411,7 @@ int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
                             path.push_back(u.id);
                             u = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == parent[u.id]);
                         }
-                        return calculate_distance(netid, path);
+                        return calculate_distance(n, path);
                     }
                     else
                     {
@@ -409,7 +433,7 @@ int bfs_find_path(die source_die, die sink_die, int netid, vector<int> &path)
                             path.push_back(u.id);
                             u = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == parent[u.id]);
                         }
-                        return calculate_distance(netid, path);
+                        return calculate_distance(n, path);
                     }
                     else
                     {
@@ -439,7 +463,7 @@ void route_net(net &n)
             cout << " [ " << n.source << " ] [0]" << endl;
             continue;
         }
-        int distance = bfs_find_path(source_die, sink_die, n.netid, path);
+        int distance = bfs_find_path(source_die, sink_die, n, path);
         if (distance == -1)
         {
             exit(-1);
