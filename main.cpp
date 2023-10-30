@@ -320,6 +320,24 @@ void read_net()
     }
 }
 
+void update_tpm_net(arc *arc, tpm_wire *wire)
+{
+    for (auto &netid : wire->netids)
+    {
+        auto tpm_net = find_if(nets.begin(), nets.end(), boost::bind(&net::netid, _1) == netid);
+        if (tpm_net->critical_path.size() <= 1)
+            continue;
+        for (int i = 0; i < tpm_net->critical_path.size() - 1; i++)
+        {
+            if ((tpm_net->critical_path[i] == arc->i && tpm_net->critical_path[i + 1] == arc->j) || (tpm_net->critical_path[i] == arc->j && tpm_net->critical_path[i + 1] == arc->i))
+            {
+                tpm_net->max_routing_weight += 4;
+                break;
+            }
+        }
+    }
+}
+
 int calculate_distance(net &n, const vector<int> &path)
 {
     int distance = 0;
@@ -369,6 +387,7 @@ int calculate_distance(net &n, const vector<int> &path)
             if ((min_wire->netids.size() - min_wire->ratio) >= 4)
             {
                 min_wire->ratio += 4;
+                update_tpm_net(arc, min_wire);
             }
             n.arcs_set.push_back(*arc);
         }
@@ -468,11 +487,12 @@ void route_net(net &n)
         {
             exit(-1);
         }
+        path.push_back(n.source);
         if (distance > n.max_routing_weight)
         {
             n.max_routing_weight = distance;
+            n.critical_path = path;
         }
-        path.push_back(n.source);
         cout << " [ ";
         for (int i = path.size() - 1; i >= 0; i--)
         {
