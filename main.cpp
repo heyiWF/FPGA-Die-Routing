@@ -41,6 +41,15 @@ struct die
     vector<arc> arcs;
 };
 
+struct single_path
+{
+    int source;
+    int sink;
+    int uses;               // how many circuits are using this path in the net
+    float routing_weight;   // routing weights may vary because using tdm wires with different ratios
+    vector<int> path_route; // detail of this path (all the dies involved)
+};
+
 struct net
 {
     int netid;
@@ -49,20 +58,13 @@ struct net
     float max_routing_weight;
     vector<int> critical_path;
     vector<arc> arcs_set;
+    vector<single_path> paths;
 };
 
 struct fpga
 {
     int fpgaid;
     vector<int> dies;
-};
-
-struct path
-{
-    int uses;                 // how many circuits are using this path
-    float routing_weight;     // routing weights may vary because using tdm wires with different ratios
-    vector<int> using_netids; // all nets that contain this path
-    vector<int> path_route;   // detail of this path (all the dies involved)
 };
 
 // struct net, node, arc, die, fpga, tpm_wire, path
@@ -215,7 +217,7 @@ void read_die_position()
             newnode.name.erase(newnode.name.find_last_not_of(" \r\n") + 1);
             if (newnode.name == "")
                 break;
-            cout << "new node {" << newnode.name << "}" << endl;
+            // cout << "new node {" << newnode.name << "}" << endl;
             newnode.die = dieid;
             it->nodes.push_back(newnode);
             nodes.push_back(newnode);
@@ -365,11 +367,6 @@ int calculate_distance(net &n, const vector<int> &path)
                 break;
             }
         }
-        if (is_recorded)
-        {
-            point++;
-            continue;
-        }
         if (arc->is_tpm)
         {
             int min_ratio = arc->wire[0].ratio;
@@ -383,19 +380,25 @@ int calculate_distance(net &n, const vector<int> &path)
                 }
             }
             distance += min_ratio / 4;
-            min_wire->netids.push_back(n.netid);
-            if ((min_wire->netids.size() - min_wire->ratio) >= 4)
+            if (!is_recorded)
             {
-                min_wire->ratio += 4;
-                update_tpm_net(arc, min_wire);
+                min_wire->netids.push_back(n.netid);
+                if ((min_wire->netids.size() - min_wire->ratio) >= 4)
+                {
+                    min_wire->ratio += 4;
+                    update_tpm_net(arc, min_wire);
+                }
+                n.arcs_set.push_back(*arc);
             }
-            n.arcs_set.push_back(*arc);
         }
         else
         {
             distance++;
-            arc->capacity--;
-            n.arcs_set.push_back(*arc);
+            if (!is_recorded)
+            {
+                arc->capacity--;
+                n.arcs_set.push_back(*arc);
+            }
         }
         point++;
     }
@@ -475,28 +478,56 @@ void route_net(net &n)
     for (auto i = n.sinks.begin(); i != n.sinks.end(); i++)
     {
         cout << n.source << " -> " << *i;
-        vector<int> path;
+        vector<int> route;
         die sink_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == *i);
         if (n.source == *i)
         {
             cout << " [ " << n.source << " ] [0]" << endl;
             continue;
         }
-        int distance = bfs_find_path(source_die, sink_die, n, path);
+        if(!n.paths.empty())
+        {
+            bool flag = false;
+            for(auto &p : n.paths)
+            {
+                if(p.source == n.source && p.sink == *i)
+                {
+                    cout << " [ ";
+                    for (int i = p.path_route.size() - 1; i >= 0; i--)
+                    {
+                        cout << p.path_route[i] << " ";
+                    }
+                    cout << "]";
+                    cout << " [" << p.routing_weight << "]" << endl;
+                    p.uses++;
+                    flag = true;
+                }
+            }
+            if(flag)
+                continue;
+        }
+        int distance = bfs_find_path(source_die, sink_die, n, route);
         if (distance == -1)
         {
             exit(-1);
         }
-        path.push_back(n.source);
+        route.push_back(n.source);
         if (distance > n.max_routing_weight)
         {
             n.max_routing_weight = distance;
-            n.critical_path = path;
+            n.critical_path = route;
         }
+        single_path newpath;
+        newpath.source = n.source;
+        newpath.sink = *i;
+        newpath.path_route = route;
+        newpath.uses = 1;
+        newpath.routing_weight = distance;
+        n.paths.push_back(newpath);
         cout << " [ ";
-        for (int i = path.size() - 1; i >= 0; i--)
+        for (int i = route.size() - 1; i >= 0; i--)
         {
-            cout << path[i] << " ";
+            cout << route[i] << " ";
         }
         cout << "]";
         cout << " [" << distance << "]" << endl;
@@ -552,14 +583,25 @@ void read_and_route_net()
     }
     route_net(nets.back());
     cout << "{" << nets.back().max_routing_weight << "}" << endl;
+    float f = 0;
+    for (auto i = nets.begin(); i != nets.end(); i++)
+    {
+        if (i->max_routing_weight > f)
+            f = i->max_routing_weight;
+    }
+    cout << "Max routing weight: " << f << endl;
 }
 
 void route_all_nets()
 {
+    float f = 0;
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
         route_net(*i);
+        if (i->max_routing_weight > f)
+            f = i->max_routing_weight;
     }
+    cout << "Max routing weight: " << f << endl;
 }
 
 int main()
