@@ -80,6 +80,11 @@ int num_die = 0;
 int num_node = 0;
 int num_net = 0;
 
+bool incr_order_sort(const single_path &path1, const single_path &path2)
+{
+    return path1.routing_weight < path2.routing_weight;
+}
+
 void test_print_all()
 {
     cout << "Total number of FPGA: " << num_fpga << endl;
@@ -340,9 +345,9 @@ void update_tpm_net(arc *arc, tpm_wire *wire)
     }
 }
 
-int calculate_distance(net &n, const vector<int> &path)
+float calculate_distance(net &n, const vector<int> &path)
 {
-    int distance = 0;
+    float distance = 0;
     int point = 0;
 
     while (point < path.size() - 1)
@@ -379,7 +384,7 @@ int calculate_distance(net &n, const vector<int> &path)
                     min_wire = &arc->wire[i];
                 }
             }
-            distance += min_ratio / 4;
+            distance += 0.5 * (1 + 2 * min_ratio);
             if (!is_recorded)
             {
                 min_wire->netids.push_back(n.netid);
@@ -402,10 +407,10 @@ int calculate_distance(net &n, const vector<int> &path)
         }
         point++;
     }
-    return distance + 1;
+    return distance;
 }
 
-int bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
+float bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
 {
     vector<bool> visited(num_die, false);
     map<int, int> parent; // die and its parent
@@ -433,6 +438,7 @@ int bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
                             path.push_back(u.id);
                             u = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == parent[u.id]);
                         }
+                        path.push_back(source_die.id);
                         return calculate_distance(n, path);
                     }
                     else
@@ -455,6 +461,7 @@ int bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
                             path.push_back(u.id);
                             u = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == parent[u.id]);
                         }
+                        path.push_back(source_die.id);
                         return calculate_distance(n, path);
                     }
                     else
@@ -485,12 +492,12 @@ void route_net(net &n)
             cout << " [ " << n.source << " ] [0]" << endl;
             continue;
         }
-        if(!n.paths.empty())
+        if (!n.paths.empty())
         {
             bool flag = false;
-            for(auto &p : n.paths)
+            for (auto &p : n.paths)
             {
-                if(p.source == n.source && p.sink == *i)
+                if (p.source == n.source && p.sink == *i)
                 {
                     cout << " [ ";
                     for (int i = p.path_route.size() - 1; i >= 0; i--)
@@ -503,15 +510,14 @@ void route_net(net &n)
                     flag = true;
                 }
             }
-            if(flag)
+            if (flag)
                 continue;
         }
-        int distance = bfs_find_path(source_die, sink_die, n, route);
+        float distance = bfs_find_path(source_die, sink_die, n, route);
         if (distance == -1)
         {
             exit(-1);
         }
-        route.push_back(n.source);
         if (distance > n.max_routing_weight)
         {
             n.max_routing_weight = distance;
@@ -592,6 +598,11 @@ void read_and_route_net()
     cout << "Max routing weight: " << f << endl;
 }
 
+void sort_net_paths(net &n)
+{
+    sort(n.paths.begin(), n.paths.end(), incr_order_sort);
+}
+
 void route_all_nets()
 {
     float f = 0;
@@ -602,6 +613,50 @@ void route_all_nets()
             f = i->max_routing_weight;
     }
     cout << "Max routing weight: " << f << endl;
+}
+
+void file_output()
+{
+    ofstream output;
+    output.open("design.route.out");
+    if (!output.is_open())
+    {
+        cout << "Error opening file";
+        exit(1);
+    }
+    for (auto i = nets.begin(); i != nets.end(); i++)
+    {
+        output << "[" << i->netid << "]" << endl;
+        float f = i->max_routing_weight + 1;
+        int path_count = 0;
+        while (path_count < i->paths.size())
+        {
+            single_path out_path;
+            for (auto j = i->paths.begin(); j != i->paths.end(); j++)
+            {
+                float rw = 0;
+                if (j->routing_weight > rw && j->routing_weight < f)
+                {
+                    rw = j->routing_weight;
+                    out_path = *j;
+                }
+            }
+            for (int i = 0; i < out_path.uses; i++)
+            {
+                output << "[";
+                for (auto k = out_path.path_route.rbegin(); k != out_path.path_route.rend() - 1; k++)
+                {
+                    output << *k << ",";
+                }
+                output << *(out_path.path_route.rend() - 1);
+                output << "][" << out_path.routing_weight << "]" << endl;
+            }
+            f = out_path.routing_weight;
+            path_count++;
+        }
+        output << endl;
+    }
+    output.close();
 }
 
 int main()
@@ -623,5 +678,6 @@ int main()
     cout << "Routing all nets!" << endl;
     // route_all_nets();
     read_and_route_net();
+    file_output();
     return 0;
 }
