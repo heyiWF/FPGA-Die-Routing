@@ -615,7 +615,7 @@ void route_all_nets()
     cout << "Max routing weight: " << f << endl;
 }
 
-void file_output()
+void file_output() // this function is destructive!!
 {
     ofstream output;
     output.open("design.route.out");
@@ -627,20 +627,11 @@ void file_output()
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
         output << "[" << i->netid << "]" << endl;
-        float f = i->max_routing_weight + 1;
-        int path_count = 0;
-        while (path_count < i->paths.size())
+        sort_net_paths(*i);
+        single_path out_path;
+        while (i->paths.size() > 0)
         {
-            single_path out_path;
-            for (auto j = i->paths.begin(); j != i->paths.end(); j++)
-            {
-                float rw = 0;
-                if (j->routing_weight > rw && j->routing_weight < f)
-                {
-                    rw = j->routing_weight;
-                    out_path = *j;
-                }
-            }
+            out_path = *i->paths.rbegin();
             for (int i = 0; i < out_path.uses; i++)
             {
                 output << "[";
@@ -651,8 +642,7 @@ void file_output()
                 output << *(out_path.path_route.rend() - 1);
                 output << "][" << out_path.routing_weight << "]" << endl;
             }
-            f = out_path.routing_weight;
-            path_count++;
+            i->paths.pop_back();
         }
         output << endl;
     }
