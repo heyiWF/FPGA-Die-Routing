@@ -17,10 +17,11 @@ struct node
     int die;
 };
 
-struct tpm_wire
+struct tdm_wire
 {
     int id;
     int ratio;
+    bool direction;     // 0: i -> j, 1: j -> i
     vector<int> netids; // nets that use this wire
 };
 
@@ -28,9 +29,9 @@ struct arc
 {
     int i;
     int j;
-    bool is_tpm;
+    bool is_tdm;
     int capacity;          // if SLL use this
-    vector<tpm_wire> wire; // if TPM use this
+    vector<tdm_wire> wire; // if TDM use this
 };
 
 struct die
@@ -67,7 +68,7 @@ struct fpga
     vector<int> dies;
 };
 
-// struct net, node, arc, die, fpga, tpm_wire, path
+// struct net, node, arc, die, fpga, tdm_wire, path
 
 vector<net> nets;
 vector<node> nodes;
@@ -114,7 +115,7 @@ void test_print_all()
         cout << "Die " << i->id << ": " << endl;
         for (auto j = i->arcs.begin(); j != i->arcs.end(); j++)
         {
-            cout << j->i << " - " << j->j << " (" << j->capacity << ") " << boolalpha << j->is_tpm << endl;
+            cout << j->i << " - " << j->j << " (" << j->capacity << ") " << boolalpha << j->is_tdm << endl;
         }
         cout << endl;
     }
@@ -267,17 +268,26 @@ void read_die_network()
             newarc.j = it2->id;
             if (it1->fpga == it2->fpga)
             {
-                newarc.is_tpm = false;
+                newarc.is_tdm = false;
                 newarc.capacity = num;
             }
             else
             {
-                newarc.is_tpm = true;
-                for (int i = 0; i < num; i++)
+                newarc.is_tdm = true;
+                for (int i = 0; i < num / 2; i++)
                 {
-                    tpm_wire newwire;
+                    tdm_wire newwire;
                     newwire.id = i;
                     newwire.ratio = 4;
+                    newwire.direction = 0;
+                    newarc.wire.push_back(newwire);
+                }
+                for (int i = 0; i < num / 2; i++)
+                {
+                    tdm_wire newwire;
+                    newwire.id = i;
+                    newwire.ratio = 4;
+                    newwire.direction = 1;
                     newarc.wire.push_back(newwire);
                 }
             }
@@ -327,20 +337,35 @@ void read_net()
     }
 }
 
-void update_tpm_net(arc *arc, tpm_wire *wire)
+void update_tpm_net(arc &arc, tdm_wire &wire)
 {
-    for (auto &netid : wire->netids)
+    for (auto &netid : wire.netids)
     {
         auto tpm_net = find_if(nets.begin(), nets.end(), boost::bind(&net::netid, _1) == netid);
-        if (tpm_net->critical_path.size() <= 1)
-            continue;
-        for (int i = 0; i < tpm_net->critical_path.size() - 1; i++)
+        single_path critical_path;
+        for (auto &route : tpm_net->paths)
         {
-            if ((tpm_net->critical_path[i] == arc->i && tpm_net->critical_path[i + 1] == arc->j) || (tpm_net->critical_path[i] == arc->j && tpm_net->critical_path[i + 1] == arc->i))
+            if (route.path_route.size() <= 1)
+                continue;
+            for (int i = 0; i < route.path_route.size() - 1; i++)
             {
-                tpm_net->max_routing_weight += 4;
-                break;
+                if ((route.path_route[i] == arc.i && route.path_route[i + 1] == arc.j) || (route.path_route[i] == arc.j && route.path_route[i + 1] == arc.i))
+                {
+                    route.routing_weight += 4;
+                    if (route.routing_weight > tpm_net->max_routing_weight)
+                    {
+                        critical_path = route;
+                    }
+                    break;
+                }
             }
+        }
+        if (tpm_net->max_routing_weight == 11.5)
+            cout << critical_path.routing_weight << endl;
+        if (critical_path.routing_weight > tpm_net->max_routing_weight)
+        {
+            tpm_net->max_routing_weight = critical_path.routing_weight;
+            tpm_net->critical_path = critical_path.path_route;
         }
     }
 }
@@ -353,47 +378,77 @@ float calculate_distance(net &n, const vector<int> &path)
     while (point < path.size() - 1)
     {
         int next = point + 1;
-        die *die = &*find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == path[point]);
-        arc *arc = nullptr;
-        for (auto i = die->arcs.begin(); i != die->arcs.end(); i++)
+        for (auto d : dies)
         {
-            if (i->i == path[next] || i->j == path[next])
+            if (d.id == path[point])
+                die &die1 = d;
+            if (d.id == path[next])
+                die &die2 = d;
+        }
+        die &die1 = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == path[point]);
+        die &die2 = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == path[next]);
+        // arc arc;
+        int i, j;
+        for (i = 0; i < die1.arcs.size(); i++)
+        {
+            if ((die1.arcs[i].i == path[next] && die1.arcs[i].j == path[point]) || (die1.arcs[i].j == path[next] && die1.arcs[i].i == path[point]))
             {
-                arc = &*i;
+                // arc = die.arcs[i];
+                break;
+            }
+        }
+        for (j = 0; j < die2.arcs.size(); j++)
+        {
+            if ((die2.arcs[j].i == path[next] && die2.arcs[j].j == path[point]) || (die2.arcs[j].j == path[next] && die2.arcs[j].i == path[point]))
+            {
+                // arc = die.arcs[i];
                 break;
             }
         }
         bool is_recorded = false;
         for (auto const &recorded_arc : n.arcs_set)
         {
-            if ((arc->i == recorded_arc.i && arc->j == recorded_arc.j) || (arc->i == recorded_arc.j && arc->j == recorded_arc.i))
+            if ((die1.arcs[i].i == recorded_arc.i && die1.arcs[i].j == recorded_arc.j) || (die1.arcs[i].i == recorded_arc.j && die1.arcs[i].j == recorded_arc.i))
             {
                 is_recorded = true;
                 break;
             }
         }
-        if (arc->is_tpm)
+        bool tdm_direction = die1.arcs[i].i < die1.arcs[i].j ? 0 : 1;
+        int min_ratio;
+        for (int a = 1; a < die1.arcs[i].wire.size(); a++)
         {
-            int min_ratio = arc->wire[0].ratio;
-            tpm_wire *min_wire = &arc->wire[0];
-            for (int i = 1; i < arc->wire.size(); i++)
+            if (die1.arcs[i].wire[a].direction == tdm_direction)
             {
-                if (arc->wire[i].ratio < min_ratio)
+                min_ratio = die1.arcs[i].wire[a].ratio;
+                break;
+            }
+        }
+        if (die1.arcs[i].is_tdm)
+        {
+            int min_index = 0;
+            for (int index = 0; index < die1.arcs[i].wire.size(); index++)
+            {
+                if (die1.arcs[i].wire[index].ratio < min_ratio && die1.arcs[i].wire[index].direction == tdm_direction)
                 {
-                    min_ratio = arc->wire[i].ratio;
-                    min_wire = &arc->wire[i];
+                    min_index = index;
+                    min_ratio = die1.arcs[i].wire[index].ratio;
                 }
             }
+            tdm_wire &min_wire = die1.arcs[i].wire[min_index];
+            tdm_wire &min_wire2 = die2.arcs[j].wire[min_index];
             distance += 0.5 * (1 + 2 * min_ratio);
             if (!is_recorded)
             {
-                min_wire->netids.push_back(n.netid);
-                if ((min_wire->netids.size() - min_wire->ratio) >= 4)
+                min_wire.netids.push_back(n.netid);
+                min_wire2.netids.push_back(n.netid);
+                if ((min_wire.netids.size() - min_wire.ratio) >= 4)
                 {
-                    min_wire->ratio += 4;
-                    update_tpm_net(arc, min_wire);
+                    min_wire.ratio += 4;
+                    min_wire2.ratio += 4;
+                    update_tpm_net(die1.arcs[i], min_wire);
                 }
-                n.arcs_set.push_back(*arc);
+                n.arcs_set.push_back(die1.arcs[i]);
             }
         }
         else
@@ -401,8 +456,8 @@ float calculate_distance(net &n, const vector<int> &path)
             distance++;
             if (!is_recorded)
             {
-                arc->capacity--;
-                n.arcs_set.push_back(*arc);
+                die1.arcs[i].capacity--;
+                n.arcs_set.push_back(die1.arcs[i]);
             }
         }
         point++;
@@ -426,7 +481,7 @@ float bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
         {
             int other = u.arcs[arc].i == u.id ? u.arcs[arc].j : u.arcs[arc].i;
             // cout << u.id << " -> " << other << " [" << u.arcs[arc].capacity << "]" << endl;
-            if (!u.arcs[arc].is_tpm && u.arcs[arc].capacity > 0) // sll
+            if (!u.arcs[arc].is_tdm && u.arcs[arc].capacity > 0) // sll
             {
                 if (!visited[other])
                 {
@@ -449,7 +504,7 @@ float bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
                     }
                 }
             }
-            else // tpm
+            else // tdm
             {
                 if (!visited[other])
                 {
@@ -480,24 +535,26 @@ float bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
 
 void route_net(net &n)
 {
-    cout << "Routing net " << n.netid << endl;
+    cout << "Routing net " << n.netid << " (" << n.sinks.size() << ")" << endl;
     die source_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == n.source);
     for (auto i = n.sinks.begin(); i != n.sinks.end(); i++)
     {
         cout << n.source << " -> " << *i;
         vector<int> route;
         die sink_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == *i);
+        /*
         if (n.source == *i)
         {
             cout << " [ " << n.source << " ] [0]" << endl;
             continue;
         }
+        */
         if (!n.paths.empty())
         {
             bool flag = false;
             for (auto &p : n.paths)
             {
-                if (p.source == n.source && p.sink == *i)
+                if (p.source == source_die.id && p.sink == sink_die.id)
                 {
                     cout << " [ ";
                     for (int i = p.path_route.size() - 1; i >= 0; i--)
@@ -508,20 +565,30 @@ void route_net(net &n)
                     cout << " [" << p.routing_weight << "]" << endl;
                     p.uses++;
                     flag = true;
+                    break;
                 }
             }
             if (flag)
                 continue;
         }
-        float distance = bfs_find_path(source_die, sink_die, n, route);
-        if (distance == -1)
+        float distance;
+        if (n.source != *i)
         {
-            exit(-1);
+            distance = bfs_find_path(source_die, sink_die, n, route);
+            if (distance == -1)
+            {
+                exit(-1);
+            }
+            if (distance > n.max_routing_weight)
+            {
+                n.max_routing_weight = distance;
+                n.critical_path = route;
+            }
         }
-        if (distance > n.max_routing_weight)
+        else
         {
-            n.max_routing_weight = distance;
-            n.critical_path = route;
+            distance = 0;
+            route.push_back(n.source);
         }
         single_path newpath;
         newpath.source = n.source;
@@ -581,10 +648,7 @@ void read_and_route_net()
         {
             auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
             node newnode = *it;
-            if (find(nets.back().sinks.begin(), nets.back().sinks.end(), it->die) == nets.back().sinks.end()) // && it->die != nets.back().source)
-            {
-                nets.back().sinks.push_back(newnode.die);
-            }
+            nets.back().sinks.push_back(newnode.die);
         }
     }
     route_net(nets.back());
@@ -593,7 +657,9 @@ void read_and_route_net()
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
         if (i->max_routing_weight > f)
+        {
             f = i->max_routing_weight;
+        }
     }
     cout << "Max routing weight: " << f << endl;
 }
@@ -617,42 +683,89 @@ void route_all_nets()
 
 void file_output() // this function is destructive!!
 {
-    ofstream output;
-    output.open("design.route.out");
-    if (!output.is_open())
+    ofstream output1;
+    output1.open("design.route.out");
+    if (!output1.is_open())
     {
         cout << "Error opening file";
         exit(1);
     }
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
-        output << "[" << i->netid << "]" << endl;
-        sort_net_paths(*i);
+        output1 << "[" << i->netid << "]" << endl;
+        // sort_net_paths(*i);
         single_path out_path;
         while (i->paths.size() > 0)
         {
             out_path = *i->paths.rbegin();
             for (int i = 0; i < out_path.uses; i++)
             {
-                output << "[";
+                output1 << "[";
                 for (auto k = out_path.path_route.rbegin(); k != out_path.path_route.rend() - 1; k++)
                 {
-                    output << *k << ",";
+                    output1 << *k << ",";
                 }
-                output << *(out_path.path_route.rend() - 1);
-                output << "][" << out_path.routing_weight << "]" << endl;
+                output1 << *(out_path.path_route.rend() - 1);
+                output1 << "][" << out_path.routing_weight << "]" << endl;
             }
             i->paths.pop_back();
         }
-        output << endl;
+        output1 << endl;
     }
-    output.close();
+    output1.close();
+    ofstream output2;
+    output2.open("design.tdm.out");
+    if (!output2.is_open())
+    {
+        cout << "Error opening file";
+        exit(1);
+    }
+    for (auto a : dies)
+    {
+        for (auto b : a.arcs)
+        {
+            if (b.is_tdm && b.i == a.id)
+            {
+                output2 << "[Die" << b.i << ",Die" << b.j << "]" << endl;
+                for (auto c : b.wire)
+                {
+                    if (c.netids.size() == 0)
+                        continue;
+                    output2 << "[";
+                    for (int d = 0; d < c.netids.size() - 1; d++)
+                    {
+                        output2 << c.netids[d] << ",";
+                    }
+                    output2 << c.netids[c.netids.size() - 1] << "] " << c.ratio << endl;
+                }
+                output2 << endl;
+            }
+        }
+    }
+    output1.close();
+}
+
+int count_lines()
+{
+    ifstream design_net;
+    design_net.open("design.net");
+    if (!design_net.is_open())
+    {
+        cout << "Error opening file";
+        exit(1);
+    }
+    string s;
+    int current_line = -1;
+    while (getline(design_net, s))
+    {
+        current_line++;
+    }
+    cout << current_line << endl;
+    return current_line;
 }
 
 int main()
 {
-    cout << "Hello World!" << endl;
-
     cout << "Reading design.fpga.die!" << endl;
     read_fpga_die();
     cout << "Reading design.die.position!" << endl;
