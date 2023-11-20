@@ -291,7 +291,7 @@ void read_die_network()
                     newarc.wire.push_back(newwire);
                 }
             }
-            arcs.push_back(newarc);
+            // arcs.push_back(newarc);
             it1->arcs.push_back(newarc);
             it2->arcs.push_back(newarc);
             col++;
@@ -360,8 +360,6 @@ void update_tpm_net(arc &arc, tdm_wire &wire)
                 }
             }
         }
-        if (tpm_net->max_routing_weight == 11.5)
-            cout << critical_path.routing_weight << endl;
         if (critical_path.routing_weight > tpm_net->max_routing_weight)
         {
             tpm_net->max_routing_weight = critical_path.routing_weight;
@@ -452,13 +450,13 @@ float calculate_distance(net &n, const vector<int> &path)
                 {
                     min_wire.ratio = min_wire.netids.size();
                     min_wire2.ratio = min_wire2.netids.size();
+                    update_tpm_net(die1.arcs[i], min_wire);
                 }
                 else
                 {
                     min_wire.ratio = (min_wire.netids.size() / 4 + 1) * 4;
                     min_wire2.ratio = (min_wire2.netids.size() / 4 + 1) * 4;
                 }
-                update_tpm_net(die1.arcs[i], min_wire);
                 n.arcs_set.push_back(die1.arcs[i]);
             }
         }
@@ -694,6 +692,7 @@ void route_all_nets()
 
 void file_output() // this function is destructive!!
 {
+    cout << "design.route.out" << endl;
     ofstream output1;
     output1.open("design.route.out");
     if (!output1.is_open())
@@ -724,6 +723,7 @@ void file_output() // this function is destructive!!
         output1 << endl;
     }
     output1.close();
+    cout << "design.tdm.out" << endl;
     ofstream output2;
     output2.open("design.tdm.out");
     if (!output2.is_open())
@@ -792,6 +792,7 @@ int main()
     cout << "Routing all nets!" << endl;
     // route_all_nets();
     read_and_route_net();
+    cout << "Finished. Writing to files... " << endl;
     file_output();
     return 0;
 }
