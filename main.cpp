@@ -55,7 +55,7 @@ struct net
 {
     int netid;
     int source;
-    vector<int> sinks;
+    // vector<int> sinks;
     float max_routing_weight;
     vector<int> critical_path;
     vector<arc> arcs_set;
@@ -89,11 +89,16 @@ void clear_vector(vector<T> &vt)
     vtTemp.swap(vt);
 }
 
+void clear_nodes_in_die()
+{
+    fill(nodes_in_die.begin(), nodes_in_die.end(), 0);
+}
+
 bool decr_order_sort(const net &net1, const net &net2)
 {
     return net1.max_routing_weight > net2.max_routing_weight;
 }
-
+/*
 void test_print_all()
 {
     cout << "Total number of FPGA: " << num_fpga << endl;
@@ -138,7 +143,7 @@ void test_print_all()
         }
         cout << endl;
     }
-}
+}*/
 
 void read_fpga_die()
 {
@@ -307,7 +312,7 @@ void read_die_network()
         row++;
     }
 }
-
+/*
 void read_net()
 {
     // open file
@@ -343,7 +348,7 @@ void read_net()
             nets.back().sinks.push_back(it->die);
         }
     }
-}
+}*/
 
 void update_tpm_net(arc &arc, tdm_wire &wire)
 {
@@ -552,26 +557,22 @@ float bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
 
 void route_net(net &n)
 {
-    cout << "Routing net " << n.netid << " (" << n.sinks.size() << ")" << endl;
+    cout << "Routing net " << n.netid << endl;
     die source_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == n.source);
-    for (auto i = n.sinks.begin(); i != n.sinks.end(); i++)
+    for (int i = 0; i < nodes_in_die.size(); i++)
     {
-        cout << n.source << " -> " << *i;
-        vector<int> route;
-        die sink_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == *i);
-        /*
-        if (n.source == *i)
-        {
-            cout << " [ " << n.source << " ] [0]" << endl;
+        if (nodes_in_die[i] == 0)
             continue;
-        }
-        */
+        cout << n.source << " -> " << i;
+        vector<int> route;
+        die sink_die = *find_if(dies.begin(), dies.end(), boost::bind(&die::id, _1) == i);
+        /*
         if (!n.paths.empty())
         {
             bool flag = false;
             for (auto &p : n.paths)
             {
-                if (p.source == source_die.id && p.sink == sink_die.id)
+                if (p.source == source_die.id && p.sink == i)
                 {
                     cout << " [ ";
                     for (int i = p.path_route.size() - 1; i >= 0; i--)
@@ -579,17 +580,16 @@ void route_net(net &n)
                         cout << p.path_route[i] << " ";
                     }
                     cout << "]";
-                    cout << " [" << p.routing_weight << "]" << endl;
-                    p.uses++;
+                    cout << " [" << p.routing_weight << "] <" << p.uses << ">" << endl;
                     flag = true;
                     break;
                 }
             }
             if (flag)
                 continue;
-        }
+        }*/
         float distance;
-        if (n.source != *i)
+        if (n.source != i)
         {
             distance = bfs_find_path(source_die, sink_die, n, route);
             if (distance == -1)
@@ -609,9 +609,9 @@ void route_net(net &n)
         }
         single_path newpath;
         newpath.source = n.source;
-        newpath.sink = *i;
+        newpath.sink = i;
         newpath.path_route = route;
-        newpath.uses = 1;
+        newpath.uses = nodes_in_die[i];
         newpath.routing_weight = distance;
         n.paths.push_back(newpath);
         cout << " [ ";
@@ -652,7 +652,8 @@ void read_and_route_net()
             {
                 route_net(nets.back());
                 cout << "{" << nets.back().max_routing_weight << "}" << endl;
-                clear_vector(nets.back().sinks);
+                // clear_vector(nets.back().sinks);
+                clear_nodes_in_die();
             }
             net newnet;
             newnet.netid = current_line;
@@ -665,13 +666,14 @@ void read_and_route_net()
         else if (type == "l")
         {
             auto it = find_if(nodes.begin(), nodes.end(), boost::bind(&node::name, _1) == name);
-            node newnode = *it;
-            nets.back().sinks.push_back(newnode.die);
+            // node newnode = *it;
+            // nets.back().sinks.push_back(newnode.die);
+            nodes_in_die[it->die]++;
         }
     }
     route_net(nets.back());
     cout << "{" << nets.back().max_routing_weight << "}" << endl;
-    clear_vector(nets.back().sinks);
+    // clear_vector(nets.back().sinks);
     float f = 0;
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
@@ -778,16 +780,23 @@ int count_lines()
     }
     string s;
     int current_line = -1;
+    int nets = 0;
     while (getline(design_net, s))
     {
+        // if line contains "s"
+        if (s.find("s") != -1)
+            nets++;
         current_line++;
     }
+    cout << "Total number of nets: " << nets << endl;
     cout << current_line << endl;
     return current_line;
 }
 
 int main()
 {
+    // count_lines();
+    // return 0;
     cout << "Reading design.fpga.die!" << endl;
     read_fpga_die();
     nodes_in_die.resize(num_die);
