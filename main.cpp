@@ -76,14 +76,22 @@ vector<arc> arcs;
 vector<die> dies;
 vector<fpga> fpgas;
 vector<int> path;
+vector<int> nodes_in_die;
 int num_fpga = 0;
 int num_die = 0;
 int num_node = 0;
 int num_net = 0;
 
-bool incr_order_sort(const single_path &path1, const single_path &path2)
+template <class T>
+void clear_vector(vector<T> &vt)
 {
-    return path1.routing_weight < path2.routing_weight;
+    vector<T> vtTemp;
+    vtTemp.swap(vt);
+}
+
+bool decr_order_sort(const net &net1, const net &net2)
+{
+    return net1.max_routing_weight > net2.max_routing_weight;
 }
 
 void test_print_all()
@@ -644,6 +652,7 @@ void read_and_route_net()
             {
                 route_net(nets.back());
                 cout << "{" << nets.back().max_routing_weight << "}" << endl;
+                clear_vector(nets.back().sinks);
             }
             net newnet;
             newnet.netid = current_line;
@@ -662,6 +671,7 @@ void read_and_route_net()
     }
     route_net(nets.back());
     cout << "{" << nets.back().max_routing_weight << "}" << endl;
+    clear_vector(nets.back().sinks);
     float f = 0;
     for (auto i = nets.begin(); i != nets.end(); i++)
     {
@@ -673,9 +683,9 @@ void read_and_route_net()
     cout << "Max routing weight: " << f << endl;
 }
 
-void sort_net_paths(net &n)
+void sort_all_nets()
 {
-    sort(n.paths.begin(), n.paths.end(), incr_order_sort);
+    sort(nets.begin(), nets.end(), decr_order_sort);
 }
 
 void route_all_nets()
@@ -690,8 +700,9 @@ void route_all_nets()
     cout << "Max routing weight: " << f << endl;
 }
 
-void file_output() // this function is destructive!!
+void file_output() // this function is (not yet) destructive!!
 {
+    sort_all_nets();
     cout << "design.route.out" << endl;
     ofstream output1;
     output1.open("design.route.out");
@@ -779,6 +790,7 @@ int main()
 {
     cout << "Reading design.fpga.die!" << endl;
     read_fpga_die();
+    nodes_in_die.resize(num_die);
     cout << "Reading design.die.position!" << endl;
     read_die_position();
     cout << "Reading design.die.network!" << endl;
