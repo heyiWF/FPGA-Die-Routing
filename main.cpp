@@ -764,7 +764,7 @@ void file_output() // this function is (not yet) destructive!!
             output1 << *(out_path.path_route.rend() - 1);
             output1 << "][" << out_path.routing_weight << "]" << endl;
         }
-        output1 << endl;
+        // output1 << endl;
     }
     output1.close();
     cout << "design.tdm.out" << endl;
@@ -793,7 +793,7 @@ void file_output() // this function is (not yet) destructive!!
                     }
                     output2 << c.netids[c.netids.size() - 1] << "] " << c.ratio << endl;
                 }
-                output2 << endl;
+                // output2 << endl;
             }
         }
     }
