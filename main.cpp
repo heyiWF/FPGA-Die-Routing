@@ -60,6 +60,7 @@ struct net
     vector<int> critical_path;
     vector<arc> arcs_set;
     vector<single_path> paths;
+    vector<int> nodes_order;
 };
 
 struct fpga
@@ -72,7 +73,7 @@ struct fpga
 
 vector<net> nets;
 vector<node> nodes;
-vector<arc> arcs;
+// vector<arc> arcs;
 vector<die> dies;
 vector<fpga> fpgas;
 vector<int> path;
@@ -96,7 +97,10 @@ void clear_nodes_in_die()
 
 bool decr_order_sort(const net &net1, const net &net2)
 {
-    return net1.max_routing_weight > net2.max_routing_weight;
+    if (net1.max_routing_weight == net2.max_routing_weight)
+        return net1.netid < net2.netid;
+    else
+        return net1.max_routing_weight > net2.max_routing_weight;
 }
 /*
 void test_print_all()
@@ -350,13 +354,13 @@ void read_net()
     }
 }*/
 
-void update_tpm_net(arc &arc, tdm_wire &wire)
+void update_tdm_net(arc &arc, tdm_wire &wire)
 {
     for (auto &netid : wire.netids)
     {
-        auto tpm_net = find_if(nets.begin(), nets.end(), boost::bind(&net::netid, _1) == netid);
+        auto &tdm_net = *find_if(nets.begin(), nets.end(), boost::bind(&net::netid, _1) == netid);
         single_path critical_path;
-        for (auto &route : tpm_net->paths)
+        for (auto &route : tdm_net.paths)
         {
             if (route.path_route.size() <= 1)
                 continue;
@@ -365,7 +369,7 @@ void update_tpm_net(arc &arc, tdm_wire &wire)
                 if ((route.path_route[i] == arc.i && route.path_route[i + 1] == arc.j) || (route.path_route[i] == arc.j && route.path_route[i + 1] == arc.i))
                 {
                     route.routing_weight += 4;
-                    if (route.routing_weight > tpm_net->max_routing_weight)
+                    if (route.routing_weight > tdm_net.max_routing_weight)
                     {
                         critical_path = route;
                     }
@@ -373,10 +377,10 @@ void update_tpm_net(arc &arc, tdm_wire &wire)
                 }
             }
         }
-        if (critical_path.routing_weight > tpm_net->max_routing_weight)
+        if (critical_path.routing_weight > tdm_net.max_routing_weight)
         {
-            tpm_net->max_routing_weight = critical_path.routing_weight;
-            tpm_net->critical_path = critical_path.path_route;
+            tdm_net.max_routing_weight = critical_path.routing_weight;
+            tdm_net.critical_path = critical_path.path_route;
         }
     }
 }
@@ -457,13 +461,13 @@ float calculate_distance(net &n, const vector<int> &path)
                 {
                     min_wire.ratio += 4;
                     min_wire2.ratio += 4;
-                    update_tpm_net(die1.arcs[i], min_wire);
+                    update_tdm_net(die1.arcs[i], min_wire);
                 }*/
                 if (min_wire.netids.size() % 4 == 0)
                 {
                     min_wire.ratio = min_wire.netids.size();
                     min_wire2.ratio = min_wire2.netids.size();
-                    update_tpm_net(die1.arcs[i], min_wire);
+                    update_tdm_net(die1.arcs[i], min_wire);
                 }
                 else
                 {
@@ -669,6 +673,7 @@ void read_and_route_net()
             // node newnode = *it;
             // nets.back().sinks.push_back(newnode.die);
             nodes_in_die[it->die]++;
+            nets.back().nodes_order.push_back(it->die);
         }
     }
     route_net(nets.back());
@@ -687,6 +692,19 @@ void read_and_route_net()
 
 void sort_all_nets()
 {
+    for (auto &n : nets)
+    {
+        n.critical_path.clear();
+        n.max_routing_weight = 0;
+        for (auto &p : n.paths)
+        {
+            if (p.routing_weight > n.max_routing_weight)
+            {
+                n.max_routing_weight = p.routing_weight;
+                n.critical_path = p.path_route;
+            }
+        }
+    }
     sort(nets.begin(), nets.end(), decr_order_sort);
 }
 
@@ -718,6 +736,7 @@ void file_output() // this function is (not yet) destructive!!
         output1 << "[" << i->netid << "]" << endl;
         // sort_net_paths(*i);
         single_path out_path;
+        /*
         while (i->paths.size() > 0)
         {
             out_path = *i->paths.rbegin();
@@ -732,6 +751,18 @@ void file_output() // this function is (not yet) destructive!!
                 output1 << "][" << out_path.routing_weight << "]" << endl;
             }
             i->paths.pop_back();
+        }
+        */
+        for (auto j = i->nodes_order.begin(); j != i->nodes_order.end(); j++)
+        {
+            out_path = *find_if(i->paths.begin(), i->paths.end(), boost::bind(&single_path::sink, _1) == *j);
+            output1 << "[";
+            for (auto k = out_path.path_route.rbegin(); k != out_path.path_route.rend() - 1; k++)
+            {
+                output1 << *k << ",";
+            }
+            output1 << *(out_path.path_route.rend() - 1);
+            output1 << "][" << out_path.routing_weight << "]" << endl;
         }
         output1 << endl;
     }
