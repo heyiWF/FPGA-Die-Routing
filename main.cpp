@@ -429,7 +429,7 @@ float calculate_distance(net &n, const vector<int> &path)
                 break;
             }
         }
-        bool tdm_direction = die1.arcs[i].i < die1.arcs[i].j ? 0 : 1;
+        bool tdm_direction = die1.id < die2.id ? 0 : 1;
         int min_ratio;
         for (int a = 0; a < die1.arcs[i].wire.size(); a++)
         {
@@ -444,7 +444,7 @@ float calculate_distance(net &n, const vector<int> &path)
             int min_index = 0;
             for (int index = 0; index < die1.arcs[i].wire.size(); index++)
             {
-                if (die1.arcs[i].wire[index].ratio < min_ratio && die1.arcs[i].wire[index].direction == tdm_direction)
+                if (die1.arcs[i].wire[index].ratio <= min_ratio && die1.arcs[i].wire[index].direction == tdm_direction)
                 {
                     min_index = index;
                     min_ratio = die1.arcs[i].wire[index].ratio;
