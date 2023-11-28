@@ -439,7 +439,7 @@ float calculate_distance(net &n, const vector<int> &path)
                 break;
             }
         }
-        if (die1.arcs[i].is_tdm)
+        if (die1.arcs[i].is_tdm) // TDM
         {
             int min_index = 0;
             for (int index = 0; index < die1.arcs[i].wire.size(); index++)
@@ -477,12 +477,13 @@ float calculate_distance(net &n, const vector<int> &path)
                 n.arcs_set.push_back(die1.arcs[i]);
             }
         }
-        else
+        else // SLL
         {
             distance++;
             if (!is_recorded)
             {
                 die1.arcs[i].capacity--;
+                die2.arcs[j].capacity--;
                 n.arcs_set.push_back(die1.arcs[i]);
             }
         }
@@ -598,6 +599,7 @@ void route_net(net &n)
             distance = bfs_find_path(source_die, sink_die, n, route);
             if (distance == -1)
             {
+                cout << "Error: cannot find path from Die" << source_die.id << " to Die" << sink_die.id << endl;
                 exit(-1);
             }
             if (distance > n.max_routing_weight)
