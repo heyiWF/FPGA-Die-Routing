@@ -484,6 +484,7 @@ float calculate_distance(net &n, const vector<int> &path)
             {
                 die1.arcs[i].capacity--;
                 die2.arcs[j].capacity--;
+                // cout << "<" << die1.arcs[i].capacity << " | " << die2.arcs[j].capacity << ">";
                 n.arcs_set.push_back(die1.arcs[i]);
             }
         }
@@ -531,7 +532,7 @@ float bfs_find_path(die source_die, die sink_die, net &n, vector<int> &path)
                     }
                 }
             }
-            else // tdm
+            else if(u.arcs[arc].is_tdm)// tdm
             {
                 if (!visited[other])
                 {
