@@ -827,6 +827,29 @@ int count_lines()
     return current_line;
 }
 
+/*****************************************************
+ * 
+ * FORCE RECALCULATE ALL NETS
+ * 
+ * ***************************************************/
+
+void force_calculate_all()
+{
+    for (auto &n : nets)
+    {
+        n.critical_path.clear();
+        n.max_routing_weight = 0;
+        for (auto &p : n.paths)
+        {
+            if (p.routing_weight > n.max_routing_weight)
+            {
+                n.max_routing_weight = p.routing_weight;
+                n.critical_path = p.path_route;
+            }
+        }
+    }
+}
+
 int main()
 {
     // count_lines();
